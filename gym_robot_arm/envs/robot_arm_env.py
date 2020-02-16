@@ -41,7 +41,7 @@ class RobotArmEnv(gym.Env):
         self.theta = np.zeros(self.n_links)
         self.min_theta = math.radians(0)
         self.max_theta = math.radians(180)
-        self.max_length = sum(self.links) - (0.25*sum(self.links))
+        self.max_length = sum(self.links)
 
     def set_increment_rate(self, rate):
         self.rate = rate
