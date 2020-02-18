@@ -142,21 +142,22 @@ class RobotArmEnv(gym.Env):
         P = self.forward_kinematics(self.theta)
         tip_pos = [P[-1][0,3], P[-1][1,3]]
         distance_error = euclidean(self.target_pos, tip_pos)
+
         reward = 0
-        if distance_error < self.current_error:
-            reward = 0
-        else: 
+        if distance_error >= self.current_error:
             reward = -1
-        self.current_error = distance_error
-
-        epsilon = 10
-        done = False
-
-        if distance_error > -epsilon and distance_error < epsilon:
+        epsilon = 5
+        if (distance_error > -epsilon and distance_error < epsilon):
             reward = 1
+
+        self.current_error = distance_error
+        self.current_score += reward
+
+        if self.current_score == -10 or self.current_score == 10:
             done = True
         else:
             done = False
+
         observation = np.hstack((self.target_pos, self.theta))
         info = {
             'distance_error': distance_error,
@@ -169,6 +170,7 @@ class RobotArmEnv(gym.Env):
         self.correct_action = True
         self.target_pos = self.generate_random_pos()
         self.step_counter = 0
+        self.current_score = 0
         observation = np.hstack((self.target_pos, self.theta))
         return observation
 
