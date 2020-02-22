@@ -8,7 +8,7 @@ from gym import error, spaces
 from gym.utils import seeding
 from scipy.spatial.distance import euclidean
 
-class RobotArmEnv(gym.Env):
+class RobotArmEnvV0(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
@@ -16,20 +16,16 @@ class RobotArmEnv(gym.Env):
         self.set_link_properties([100,100])
         self.set_increment_rate(0.01)
         self.target_pos = self.generate_random_pos()
-        self.action = {0: "INC_J1", 
-                       1: "DEC_J1",
-                       2: "HOLD_J1",
+        self.action = {0: "HOLD",
+                       1: "INC_J1",
+                       2: "DEC_J1",
                        3: "INC_J2",
                        4: "DEC_J2",
-                       5: "HOLD_J2"}
+                       5: "INC_J1_J2",
+                       6: "DEC_J1_J2"}
         
-        high = np.array([self.max_length,
-                         self.max_length,
-                         self.min_theta,
-                         self.max_theta])
-
-        self.observation_space = spaces.Box(-high, high, dtype=np.float32)
-        self.action_space = spaces.Discrete(6)
+        self.observation_space = spaces.Box(np.finfo(np.float32).min, np.finfo(np.float32).max, shape=(4,), dtype=np.float32)
+        self.action_space = spaces.Discrete(len(self.action))
 
         self.current_error = -math.inf
         self.seed()
@@ -38,9 +34,9 @@ class RobotArmEnv(gym.Env):
     def set_link_properties(self, links):
         self.links = links
         self.n_links = len(self.links)
-        self.theta = np.zeros(self.n_links)
         self.min_theta = math.radians(0)
-        self.max_theta = math.radians(180)
+        self.max_theta = math.radians(90)
+        self.theta = self.generate_random_angle()
         self.max_length = sum(self.links)
 
     def set_increment_rate(self, rate):
@@ -104,9 +100,15 @@ class RobotArmEnv(gym.Env):
         base_to_target = self.translate(self.target_pos[0], -self.target_pos[1], 0)
         target = base.dot(base_to_target)
         pygame.draw.circle(self.screen, TARGET_COLOR, (int(target[0,3]),int(target[1,3])), 12)
+    
+    def generate_random_angle(self):
+        theta = np.zeros(self.n_links)
+        theta[0] = random.uniform(self.min_theta, self.max_theta)
+        theta[1] = random.uniform(self.min_theta, self.max_theta)
+        return theta
 
     def generate_random_pos(self):
-        theta = np.random.rand(2)
+        theta = self.generate_random_angle()
         P = self.forward_kinematics(theta)
         pos = np.array([P[-1][0,3], P[-1][1,3]])
         return pos
@@ -124,20 +126,21 @@ class RobotArmEnv(gym.Env):
             self.theta[0] += self.rate
         elif self.action[action] == "DEC_J1":
             self.theta[0] -= self.rate
-        elif self.action[action] == "HOLD_J1":
-            self.theta[0] = self.theta[0]
         elif self.action[action] == "INC_J2":
             self.theta[1] += self.rate 
         elif self.action[action] == "DEC_J2":
-            self.theta[1] -= self.rate 
-        elif self.action[action] == "HOLD_J2":
-            self.theta[1] = self.theta[1]
+            self.theta[1] -= self.rate
+        elif self.action[action] == "INC_J1_J2":
+            self.theta[0] += self.rate
+            self.theta[1] += self.rate 
+        elif self.action[action] == "DEC_J1_J2":
+            self.theta[0] -= self.rate
+            self.theta[1] -= self.rate
 
         self.theta[0] = np.clip(self.theta[0], self.min_theta, self.max_theta)
         self.theta[1] = np.clip(self.theta[1], self.min_theta, self.max_theta)
         self.theta[0] = self.normalize_angle(self.theta[0])
         self.theta[1] = self.normalize_angle(self.theta[1])
-        self.step_counter += 1
         # Calc reward
         P = self.forward_kinematics(self.theta)
         tip_pos = [P[-1][0,3], P[-1][1,3]]
@@ -146,7 +149,7 @@ class RobotArmEnv(gym.Env):
         reward = 0
         if distance_error >= self.current_error:
             reward = -1
-        epsilon = 5
+        epsilon = 10
         if (distance_error > -epsilon and distance_error < epsilon):
             reward = 1
 
@@ -167,9 +170,7 @@ class RobotArmEnv(gym.Env):
         return observation, reward, done, info
 
     def reset(self):
-        self.correct_action = True
         self.target_pos = self.generate_random_pos()
-        self.step_counter = 0
         self.current_score = 0
         observation = np.hstack((self.target_pos, self.theta))
         return observation
@@ -190,3 +191,38 @@ class RobotArmEnv(gym.Env):
     def close(self):
         if self.viewer != None:
             pygame.quit()
+
+class RobotArmEnvV1(RobotArmEnvV0):
+    def __init__(self):
+        super(RobotArmEnvV1, self).__init__()
+
+        self.min_action = -1.0
+        self.max_action = 1.0
+        self.min_theta = np.radians(0)
+        self.max_theta = np.radians(90)
+        self.action_space = spaces.Box(low=self.min_action, high=self.max_action, shape=(2,), dtype=np.float32)
+
+    def step(self, action):
+        theta0 = np.interp(action[0], (self.min_action, self.max_action), (self.min_theta, self.max_theta))
+        theta1 = np.interp(action[1], (self.min_action, self.max_action), (self.min_theta, self.max_theta))
+        self.theta[0] = theta0
+        self.theta[1] = theta1
+        # Calc reward
+        P = self.forward_kinematics(self.theta)
+        tip_pos = [P[-1][0,3], P[-1][1,3]]
+        distance_error = euclidean(self.target_pos, tip_pos)
+
+        # Sharp reward
+        reward = -distance_error / 100
+        done = False
+        epsilon = 5
+        if (distance_error > -epsilon and distance_error < epsilon):
+            done = True
+
+        observation = np.hstack((self.target_pos, self.theta))
+        info = {
+            'distance_error': distance_error,
+            'target_position': self.target_pos,
+            'current_position': tip_pos
+        }
+        return observation, reward, done, info
