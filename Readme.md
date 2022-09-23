@@ -31,7 +31,7 @@ By default, increment or decrement rate for both of joints are 0.01 radians.
 
 Reward Function:
 
-* Robot will get penalty -1 if current distance between tip and target position is smaller than previous distance
+* Robot will get penalty -1 if current distance between tip and target position is greater equal than previous distance
 * Robot will get reward 1 if cureent distance between tip and target position is > -epsilon and < epsilon, where epsilon = 10 pixels
 
 Terminal Condition:
