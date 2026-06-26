@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=40.8.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gym-robot-arm"
+version = "2.0.0"
+description = "Gymnasium 2D Robot Arm Environment — reach target with 2-link arm"
+readme = "Readme.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Eko Rudiawan Jamzuri"}
+]
+requires-python = ">=3.8"
+dependencies = [
+    "gymnasium>=0.28",
+    "pygame>=2.0",
+    "numpy>=1.21",
+]
+
+[tool.setuptools.packages.find]
+include = ["gym_robot_arm*"]

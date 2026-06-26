@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system deps (pygame)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
+          sudo apt-get install -y -qq libportmidi-dev
+
+      - name: Install package
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install -e .
+
+      - name: Test env creation
+        run: |
+          python -c "
+          import gymnasium as gym
+          import gym_robot_arm
+          for env_id in ['robot-arm-v0', 'robot-arm-v1']:
+              env = gym.make(env_id)
+              obs, info = env.reset()
+              assert obs.shape == (4,), f'Bad obs shape: {obs.shape}'
+              a = env.action_space.sample()
+              obs, r, term, trunc, info = env.step(a)
+              print(f'{env_id}: OK (obs={obs.shape}, reward={r})')
+              env.close()
+          "
+
+      - name: Lint with ruff
+        run: |
+          pip install ruff
+          ruff check gym_robot_arm/ --no-fix || true
